@@ -92,7 +92,7 @@ uint8_t send_ack(struct hash_content* cont)
     }
 
     //put into route table
-    if(skb_dst(skb) == NULL)
+    //if(skb_dst(skb) == NULL)
     {
         struct dst_entry *route = NULL;
         struct flowi6 fl6 =
@@ -112,6 +112,7 @@ uint8_t send_ack(struct hash_content* cont)
 #ifdef DEBUG
     printk("FUNC:send_ack===ack sent!\n");
 #endif
+    printk("%s<==ack\n",skb->dev->name);
     
     //put node into ack sent hash table
     ack_sent_add(cont, CONTENT_TYPE_ACK, skb);
@@ -133,12 +134,14 @@ out:
 //@bitmap:  pointer to bitmap
 //@len:     length of bitmap
 //return >0 means failed, 0 means success
-uint8_t send_needmore(struct hash_content *cont, uint8_t *bitmap, uint16_t len)
+uint8_t send_needmore(struct hash_content *cont, uint8_t *bitmap, uint32_t len)
 {
     struct sk_buff *skb = NULL;
     struct ethhdr *ethhdr = NULL;
     struct ipv6hdr *iph = NULL;
-    uint8_t *pexhdr = NULL, *pdata = NULL;
+    u_char *pexhdr = NULL;
+    uint8_t *pdata = NULL;
+    uint16_t *pbitlen = NULL;
 
     uint8_t nret = 1;
     uint16_t data_len = 0;
@@ -174,14 +177,14 @@ uint8_t send_needmore(struct hash_content *cont, uint8_t *bitmap, uint16_t len)
     skb_put(skb, sizeof(struct content_needmore));
 
     //set payload pointer
-    pdata = pexhdr + sizeof(struct content_needmore);
-    skb_put(skb, data_len);
+    pbitlen = (uint16_t*)(pexhdr + sizeof(struct content_needmore));
+    pdata = (uint8_t*)(pexhdr + sizeof(struct content_needmore) + 2);
+    skb_put(skb, data_len + 2);
 
     {
         //set data content
-        uint16_t *pdlen = (uint16_t*)pdata;
-        *pdlen = htons(len);
-        memcpy(pdata + BITMAP_H, bitmap, data_len);
+        *pbitlen = htons(data_len);
+        memcpy(pdata, bitmap, data_len);
         //memcpy(pdata, bitmap, data_len);
     }
 
@@ -243,9 +246,11 @@ uint8_t send_needmore(struct hash_content *cont, uint8_t *bitmap, uint16_t len)
     if(0 > dst_output(skb_clone(skb, GFP_ATOMIC)))
         goto out;
     nret = 0;
+	printk("bit map length:%d,packs:%d\n",data_len,len);
+    printk("%s<==needmore\n",skb->dev->name);
     
     //put node into ack sent hash table
-    ack_sent_add(cont, CONTENT_TYPE_NEEDMORE, skb);
+    //ack_sent_add(cont, CONTENT_TYPE_NEEDMORE, skb);
 
 out:
     if(0 != nret && NULL!=skb)
@@ -275,6 +280,7 @@ uint8_t send_ack_again(struct send_ack_info* node)
 #ifdef DEBUG
     printk("FUNC:send_ack_again===\n");
 #endif
+    printk("%s<==ack/needmore again\n",node->skb->dev->name);
     return 0;
 }
 
@@ -492,9 +498,142 @@ uint8_t send_resp(uint8_t *label, struct in6_addr sip, struct in6_addr dip,
         skb->dev = route->dev;
     }
 
+    printk("%s<==resp from netlink\n",skb->dev->name);
+    //add resp into chunk table
+    //2016-06-23 He Jieting
+    {
+        struct hash_node* node = NULL;
+        struct hash_content cont;
+
+        memcpy(cont.label, label, LABEL_SIZE);
+        memcpy(&cont.sip, &sip, sizeof(struct in6_addr));
+        memcpy(&cont.dip, &dip, sizeof(struct in6_addr));
+
+        node = get_node(chunk_table, &cont);
+        if(NULL == node)
+        {
+            chunk_table_add(&cont, seq, frag, skb_clone(skb, GFP_ATOMIC));
+        }
+        else
+        {
+            chunk_table_update((struct chunk_info*)node, seq,
+                    skb_clone(skb, GFP_ATOMIC));
+        }
+    }
+
     nret = forward_resp(skb_clone(skb, GFP_ATOMIC));
 
     if(nret == 0)
+        return 1;
+    else
+        return 0;
+}
+
+//this function is used to send hsyn pack.
+//@label:   pointer to label
+//@sip:     src ip address
+//@dip:     dst ip address
+uint8_t send_hsyn(uint8_t *label, struct in6_addr sip, struct in6_addr dip)
+{
+    struct sk_buff *skb = NULL;
+    struct ethhdr *ethhdr = NULL;
+    struct ipv6hdr *iph = NULL;
+    uint8_t *pexhdr = NULL;
+    struct hash_content cont;
+
+    uint8_t nret = 1;
+
+    if(NULL == label)
+        return 1;
+
+    memcpy(cont.label, label, LABEL_SIZE);
+    //swap dip & sip.
+    //dip & sip from the req pack
+    memcpy(&cont.sip, &dip, sizeof(struct in6_addr));
+    memcpy(&cont.dip, &sip, sizeof(struct in6_addr));
+
+    //kmalloc new skb for new pack
+    skb = alloc_skb(sizeof(struct ipv6hdr) +
+            LINK_LEN + sizeof(struct content_hsyn), GFP_ATOMIC);
+
+    if(NULL == skb)
+        return 1;
+
+    //set skb
+    skb_reserve(skb,LINK_LEN);
+    skb->pkt_type = PACKET_OTHERHOST;
+    skb->protocol = __constant_htons(ETH_P_IPV6);
+    skb->ip_summed = CHECKSUM_NONE;
+    skb->priority = 0;
+
+    //set ip header pointer
+    //network header = skb->data + 0
+    skb_set_network_header(skb,0);
+    //change tail and len pointer
+    skb_put(skb, sizeof(struct ipv6hdr));
+
+    //set ipv6 ex header pointer
+    pexhdr = skb->data + sizeof(struct ipv6hdr);
+    skb_put(skb, sizeof(struct content_hsyn));
+
+    //hsyn pack have no data payload
+
+    {
+        //set ex ipv6 header content
+        struct content_hsyn hsyn;
+        hsyn.head.nexthdr = 59;
+        hsyn.head.length = 5;
+        hsyn.head.version = 1;
+        hsyn.head.FP = 1;
+        hsyn.head.type = CONTENT_TYPE_HSYN;
+        hsyn.head.checksum = htons(0);
+        memset(&hsyn.head.pad, 0, 2);
+        memcpy(hsyn.label, label, LABEL_SIZE);
+
+        //write into skb
+        memcpy(pexhdr, &hsyn, sizeof(struct content_hsyn));
+    }
+
+    {
+        //set ipv6 basic header
+        iph = ipv6_hdr(skb);
+        iph->version = 6;
+        iph->priority = 0;
+        memset(iph->flow_lbl, 0, 3);
+        iph->payload_len = htons(sizeof(struct content_hsyn));
+        iph->nexthdr = IPPROTO_CONTENT;
+        iph->hop_limit = 64;
+        //swap sip & dip
+        memcpy(&iph->saddr, &dip, sizeof(struct in6_addr));
+        memcpy(&iph->daddr, &sip, sizeof(struct in6_addr));
+    }
+
+    {
+        //set mac header content
+        ethhdr = (struct ethhdr*)(skb->data -14);
+        ethhdr->h_proto = __constant_htons(ETH_P_IPV6);
+    }
+
+
+    //put into route table
+    {
+        struct dst_entry *route = NULL;
+        struct flowi6 fl6 = 
+        {
+            .daddr = iph->daddr,
+            .saddr = iph->saddr,
+        };
+        route = ip6_route_output(&init_net, NULL, &fl6);
+        skb_dst_set(skb, route);
+        skb->dev = route->dev;
+    }
+
+    //send the ack
+    nret = forward_hsyn(skb_clone(skb, GFP_ATOMIC), &cont);
+
+    kfree_skb(skb);
+
+    if(0 == nret)
         return 1;
     else
         return 0;
@@ -511,7 +650,7 @@ uint8_t forward_req(struct sk_buff* skb, struct hash_content *cont,
         return 0;
 
     //put into route table
-    if(skb_dst(skb) == NULL)
+    //if(skb_dst(skb) == NULL)
     {
         struct dst_entry *route = NULL;
         struct ipv6hdr *hdr = ipv6_hdr(skb);
@@ -531,12 +670,14 @@ uint8_t forward_req(struct sk_buff* skb, struct hash_content *cont,
     if(0 > dst_output(skb_clone(skb, GFP_ATOMIC)))
     {
         //something wrong
+	printk("forward req error!\n");
         return 0;
     }
 
 #ifdef DEBUG
     printk("forward_req->send pack\n");
 #endif
+    printk("%s<==req\n",skb->dev->name);
     if(flag)
     {
         //wait for ack
@@ -557,14 +698,14 @@ uint8_t forward_req(struct sk_buff* skb, struct hash_content *cont,
 uint8_t forward_hsyn(struct sk_buff* skb, struct hash_content *cont)
 {
     struct ipv6hdr *hdr = NULL;
-    if(NULL == skb || NULL == cont)
+    if(NULL == skb)
         return 0;
 
     hdr = ipv6_hdr(skb);
-    hdr->hop_limit++;
+    hdr->hop_limit = 64;
 
     //put into route table
-    if(skb_dst(skb) == NULL)
+    //if(skb_dst(skb) == NULL)
     {
         struct dst_entry *route = NULL;
         struct ipv6hdr *hdr = ipv6_hdr(skb);
@@ -581,8 +722,10 @@ uint8_t forward_hsyn(struct sk_buff* skb, struct hash_content *cont)
     if(0 > dst_output(skb_clone(skb, GFP_ATOMIC)))
     {
         //something wrong
+        printk("send hsyn error!\n");
         return 0;
     }
+    printk("%s<==hsyn\n",skb->dev->name);
 
     wait_ack_add(cont, skb,
             CONTENT_TYPE_HSYN);
@@ -599,7 +742,7 @@ uint8_t forward_resp(struct sk_buff* skb)
         return 0;
 
     //put into route table
-    if(skb_dst(skb) == NULL)
+    //if(skb_dst(skb) == NULL)
     {
         struct dst_entry *route = NULL;
         struct ipv6hdr *hdr = ipv6_hdr(skb);
@@ -619,8 +762,10 @@ uint8_t forward_resp(struct sk_buff* skb)
     if(0 > dst_output(skb_clone(skb, GFP_ATOMIC)))
     {
         //something wrong
+	printk("send resp error!\n");
         return 0;
     }
+    //printk("%s<==resp\n",skb->dev->name);
 
 #ifdef DEBUG
     printk("forward_resp->send pack\n");

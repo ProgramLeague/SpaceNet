@@ -9,6 +9,22 @@
 #include <linux/string.h>       //for memcpy etc.
 
 #include "hash.h"
+/*
+void PrintContent(struct hash_content *cont)
+{
+	int i = 0;
+	printk("===\n");
+	for(i=0;i<LABEL_SIZE;i++)
+		printk("%d ",cont->label[i]);
+	printk("\n");
+	for(i=0;i<16;i++)
+		printk("%d ",cont->sip.s6_addr[i]);
+	printk("\n");
+	for(i=0;i<16;i++)
+		printk("%d ",cont->dip.s6_addr[i]);
+	printk("\n");
+}
+*/
 
 //supplymentrary function to get index from content info.
 //@id:      content pointer
@@ -109,7 +125,10 @@ void insert_node(struct hash_head* head, struct hash_node *node)
     uint32_t index;
 
 	if(NULL == head || NULL == node)
+{
+printk("table or node is empty!\n");
 		return;
+}
 
 	index = hash(&node->id);
 #ifdef DEBUG
@@ -156,15 +175,17 @@ uint8_t find_node(struct hash_head* head, struct hash_content *content)
 //return NULL means no, else means the pointer to node
 struct hash_node* get_node(struct hash_head* head, struct hash_content *content)
 {
-	uint32_t index;
-	struct hlist_node *p = NULL;
+    uint32_t index;
+    struct hlist_node *p = NULL;
     struct hlist_head *temp;
 
-	if(NULL == head || NULL == content)
-		return NULL;
+    if(NULL == head || NULL == content)
+        return NULL;
 
-	index = hash(content);
+    index = hash(content);
+    //printk("hash:%d\n",index);
     temp = (struct hlist_head*)(head + index);
+    //printk("is empty:%d\n",hlist_empty(temp));
 
     read_lock_bh(&head[index].lock);
 #ifdef DEBUG
@@ -173,22 +194,27 @@ struct hash_node* get_node(struct hash_head* head, struct hash_content *content)
     printk("FUNC:get_node===cont sip:%d  dip:%d\n",
             content->sip.s6_addr[3],content->dip.s6_addr[3]);
 #endif
-	hlist_for_each(p, temp)
-	{
+    //printk("content==");
+    //PrintContent(content);
+    hlist_for_each(p, temp)
+    {
 #ifdef DEBUG
         printk("FUNC:get_node===node sip:%d  dip:%d\n",
                 ((struct hash_node*)p)->id.sip.s6_addr[3],
                 ((struct hash_node*)p)->id.dip.s6_addr[3]);
 #endif
-		if(0 == memcmp(content, &((struct hash_node*)p)->id,
-					sizeof(struct hash_content)))
+        //printk("list node==");
+        //PrintContent(&((struct hash_node*)p)->id);
+        if(0 == memcmp(content, &((struct hash_node*)p)->id,
+                    sizeof(struct hash_content)))
         {
             read_unlock_bh(&head[index].lock);
-			return (struct hash_node*)p;
+            //printk("same!\n");
+            return (struct hash_node*)p;
         }
-	}
+    }
     read_unlock_bh(&head[index].lock);
-	return NULL;
+    return NULL;
 }
 
 //delete a node from hash table

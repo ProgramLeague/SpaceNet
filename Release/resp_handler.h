@@ -10,6 +10,7 @@
 
 
 #include "chunk_table.h"
+#include "wait_ack.h"
 #include "ack_sent.h"
 #include "proto.h"
 #include "util.h"

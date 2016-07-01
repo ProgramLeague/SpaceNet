@@ -51,8 +51,9 @@ struct content
 //type of message
 enum MSG_TYPE
 {
-    LABEL_MSG = 1,
-    CHUNK_MSG,
+    LABEL_MSG = 1,      //this is used to get message
+    CHUNK_MSG,          //this is used to deliver message
+//    SEARCH_MSG,         //this is used to search message
 };
 
 //struct of label message

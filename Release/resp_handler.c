@@ -8,6 +8,8 @@
 #include <linux/string.h>       //for memcpy etc.
 #include "resp_handler.h"
 
+//static int flag = 1;
+
 void handle_resp(struct sk_buff *skb, struct content_response *resp)
 {
     struct hash_content cont;
@@ -39,6 +41,19 @@ void handle_resp(struct sk_buff *skb, struct content_response *resp)
     node = get_node(chunk_table, &cont);
     if(NULL == node)
     {
+	//S<=req=C
+	//S=ack=>C
+	//s=data=>C
+	//if ack is lost, just fix it
+	struct hash_content cont_q;
+	enum CONTENT_TYPE type;
+	memcpy(cont_q.label, resp->label,LABEL_SIZE);
+	//swap sip & dip
+	memcpy(&cont_q.sip, &hdr->daddr, sizeof(struct in6_addr));
+	memcpy(&cont_q.dip, &hdr->saddr, sizeof(struct in6_addr));
+
+	type = recv_ack(&cont_q);
+
         //insert new node into chunk
 #ifdef DEBUG
         printk("new content resp\n");
@@ -52,6 +67,14 @@ void handle_resp(struct sk_buff *skb, struct content_response *resp)
 #ifdef DEBUG
         printk("old content resp, update bitmap\n");
 #endif
+/*
+	if(flag && ntohs(resp->sequence)==3)
+	{
+		flag = 0;
+		printk("drop!\n");
+		return;
+	}
+*/
         chunk_table_update((struct chunk_info*)node, ntohs(resp->sequence), 
                 skb_clone(skb, GFP_ATOMIC));
     }

@@ -17,7 +17,10 @@ unsigned int data_hook(unsigned int hooknum, struct sk_buff *skb,
         //find scsn protocol in skb
         struct content_hdr *pscsn = (struct content_hdr*)
             (skb->data + offset);
-        printk("=================================================\npacket type is:%d\n",pscsn->type);
+        //printk("=================================================\npacket type is:%d\n",pscsn->type);
+        if(pscsn->type!=CONTENT_TYPE_RESP)
+            printk("%s==>%d\n",in->name,pscsn->type);
+
         switch(pscsn->type)
         {
             case CONTENT_TYPE_REQ:
@@ -40,7 +43,7 @@ unsigned int data_hook(unsigned int hooknum, struct sk_buff *skb,
                 return NF_DROP;
             case CONTENT_TYPE_ACK:
 #ifdef DEBUG
-                printk("handle_resp\n");
+                printk("handle_ack\n");
 #endif
                 handle_ack(skb, (struct content_ack*)pscsn);
                 return NF_DROP;
@@ -56,6 +59,7 @@ unsigned int data_hook(unsigned int hooknum, struct sk_buff *skb,
 #endif
                 return NF_DROP;
         }
+
     }
 
     return NF_ACCEPT;

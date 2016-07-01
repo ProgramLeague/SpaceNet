@@ -13,6 +13,8 @@
 #include "hash.h"
 #include "chunk_table.h"
 
+extern struct hash_head chunk_table[HASH_SIZE];
+
 //this struct is node in ack sent hash table
 //@list:        basic member of hash table
 //@time_wait:   timer to free node

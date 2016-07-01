@@ -1,0 +1,32 @@
+#########################################################################
+# File Name: reload_module.sh
+# Author: He Jieting
+# mail: rambo@mail.ustc.edu.cn
+# Created Time: Sun Jun  5 07:42:01 2016
+#########################################################################
+#!/bin/bash
+if [ "`lsmod | grep forward_module`" = "" ] ; then
+    echo "install module!"
+    if [ -f /data/workspace/spacenet/forward_module.ko ] ; then
+        insmod /data/workspace/spacenet/forward_module.ko
+        echo "Done!"
+    elif [ -f /data/workspace/spacenet/RouterNode/forward_module.ko ] ; then
+        insmod /data/workspace/spacenet/RouterNode/forward_module.ko
+        echo "Done!"
+    else
+        echo "can not find forward_module.ko"
+    fi
+else
+    echo "remove module!"
+    rmmod forward_module
+    echo "install module!"
+    if [ -f /data/workspace/spacenet/forward_module.ko ] ; then
+        insmod /data/workspace/spacenet/forward_module.ko
+        echo "Done!"
+    elif [ -f /data/workspace/spacenet/RouterNode/forward_module.ko ] ; then
+        insmod /data/workspace/spacenet/RouterNode/forward_module.ko
+        echo "Done!"
+    else
+        echo "can not find forward_module.ko"
+    fi
+fi

@@ -11,6 +11,23 @@
 
 #include "chunk_table.h"
 
+/*
+void cPrintContent(struct hash_content *cont)
+{
+	int i = 0;
+	printk("===\n");
+	for(i=0;i<LABEL_SIZE;i++)
+		printk("%d ",cont->label[i]);
+	printk("\n");
+	for(i=0;i<16;i++)
+		printk("%d ",cont->sip.s6_addr[i]);
+	printk("\n");
+	for(i=0;i<16;i++)
+		printk("%d ",cont->dip.s6_addr[i]);
+	printk("\n");
+}
+*/
+
 //global chunk_table hash table
 //init & fini in file register
 struct hash_head chunk_table[HASH_SIZE];
@@ -32,6 +49,7 @@ void time_free_cb(unsigned long data)
 #ifdef DEBUG
     printk("FUNC:time_free_cb===free chunk node\n");
 #endif
+    printk("FUNC:time_free_cb===free chunk node\n");
 }
 
 //this function will use kmalloc add a new node into chunk_table
@@ -164,14 +182,16 @@ uint8_t bitmap_f(struct hash_content *cont, struct chunk_info** node)
 //| uint8_t| uint8_t|
 //|--------|--000000|
 //|<-length->|
-uint8_t* get_bitmap(struct hash_content *cont, uint16_t *length, enum USE type)
+uint8_t* get_bitmap(struct hash_content *cont, uint32_t *length, enum USE type)
 {
     struct hash_node *temp = NULL;
     uint16_t i = 0, bytes = 0, by = 0;
     uint8_t bits = 0, bi = 0, mask = 0, *result = NULL;
 
+    //cPrintContent(cont);
     if(NULL == cont)
     {
+        printk("content is empty!\n");
         *length = 0;
         return NULL;
     }
@@ -179,6 +199,7 @@ uint8_t* get_bitmap(struct hash_content *cont, uint16_t *length, enum USE type)
     temp = get_node(chunk_table, cont);
     if(NULL == temp)
     {
+        printk("no node in chunk!\n");
         *length = 0;
         return NULL;
     }
@@ -201,9 +222,8 @@ uint8_t* get_bitmap(struct hash_content *cont, uint16_t *length, enum USE type)
     for(i=0;i<*length;i++)
     {
         by = i / 8;
-        bi = i - by;
-        if((NULL==((struct chunk_info*)temp)->bitmap[i] && type == NET) ||
-           (NULL!=((struct chunk_info*)temp)->bitmap[i] && type == LOCAL)) 
+        bi = i - by * 8;
+        if(type == NET && NULL==((struct chunk_info*)temp)->bitmap[i])
         {
             //set 1
             //this bitmap will be send into network
@@ -215,7 +235,7 @@ uint8_t* get_bitmap(struct hash_content *cont, uint16_t *length, enum USE type)
             printk("FUNC:get_bitmap===%d\n",result[by]);
 #endif
         }
-        else
+        else if(type == NET && NULL!=((struct chunk_info*)temp)->bitmap[i])
         {
             //set 0
             //this bitmap will be send into network
@@ -227,6 +247,36 @@ uint8_t* get_bitmap(struct hash_content *cont, uint16_t *length, enum USE type)
 #ifdef DEBUG
             printk("FUNC:get_bitmap===%d\n",result[by]);
 #endif
+        }
+        else if(type == LOCAL && NULL!=((struct chunk_info*)temp)->bitmap[i])
+        {
+            //set 1
+            //this bitmap will be send into network
+            //1 means local node do NOT have the pack
+            mask = 0;
+            mask = (1 << bi);
+            result[by] |= mask;
+#ifdef DEBUG
+            printk("FUNC:get_bitmap===%d\n",result[by]);
+#endif
+        }
+        else if(type == LOCAL && NULL==((struct chunk_info*)temp)->bitmap[i])
+        {
+            //set 0
+            //this bitmap will be send into network
+            //0 means local node DO have the pack
+            mask = 0;
+            mask = (1 << bi);
+            mask = ~mask;
+            result[by] &= mask;
+#ifdef DEBUG
+            printk("FUNC:get_bitmap===%d\n",result[by]);
+#endif
+        }
+        else
+        {
+            //something wrong
+            printk("something wrong in get bitmap!\n");
         }
     }
 
@@ -262,7 +312,10 @@ void chunk_table_refresh(struct hash_content *cont)
 #ifdef DEBUG
     printk("FUNC:chunk_table_refresh===\n");
 #endif
-    mod_timer(&node->time_free, jiffies + msecs_to_jiffies(C_TIME_FREE));
+    if(node)
+    {
+        mod_timer(&node->time_free, jiffies + msecs_to_jiffies(C_TIME_FREE));
+    }
 
     return;
 }

@@ -24,6 +24,7 @@ void time_out_cb(unsigned long data)
 
     //send skb
     dst_output(skb_clone(node->skb, GFP_ATOMIC));
+    printk("%s<==time_out:%d\n",node->skb->dev->name,node->type);
 
     if(node->time_out_nm == 3)
     {
@@ -52,18 +53,61 @@ enum CONTENT_TYPE recv_ack(struct hash_content *cont)
     if(NULL == cont)
         return 0;;
 
-    //find & delete the node from wait ack hash table
+    //find the node from wait ack hash table
     temp = (struct wait_ack_info*)
-        del_node(wait_ack, cont);
+        get_node(wait_ack, cont);
 
     //get the node
     if(NULL != temp)
     {
         enum CONTENT_TYPE result = temp->type;
-        del_timer(&temp->time_out);
+	//delete node from wait_ack
+	del_node(wait_ack, cont);
+
+	if(NULL!=&temp->time_out)
+		del_timer(&temp->time_out);
         kfree_skb(temp->skb);
         kfree(temp);
         return result;
+    }
+    else
+    {
+#ifdef DEBUG
+	printk("can not find node!\n");
+#endif
+	printk("recv ack can not find node!\n");
+    }
+
+    return 0;
+}
+
+enum CONTENT_TYPE recv_needmore(struct hash_content *cont)
+{
+    struct wait_ack_info *temp = NULL;
+    if(NULL == cont)
+        return 0;;
+
+    //find the node from wait ack hash table
+    temp = (struct wait_ack_info*)
+        get_node(wait_ack, cont);
+
+    //get the node
+    if(NULL != temp && temp->type == CONTENT_TYPE_HSYN)
+    {
+        enum CONTENT_TYPE result = temp->type;
+        temp->time_out_nm = 0;
+        mod_timer(&temp->time_out, jiffies + msecs_to_jiffies(C_TIME_OUT));
+        //del_timer(&temp->time_out);
+        //temp->time_out = NULL;
+        return result;
+    }
+    else if(NULL != temp)
+    {
+        printk("type:%d\n",temp->type);
+    }
+    else
+    {
+        printk("can not find node!\n");
     }
 
     return 0;

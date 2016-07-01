@@ -11,7 +11,7 @@
 void handle_hsyn(struct sk_buff *skb, struct content_hsyn *hsyn)
 {
     //step 1:   check ack_sent table
-    
+
     //get the identification of skb
     //sip & dip & label
     struct hash_content cont;
@@ -27,6 +27,7 @@ void handle_hsyn(struct sk_buff *skb, struct content_hsyn *hsyn)
     printk("hanle_hsyn:S1\n");
 #endif
     chunk_table_refresh(&cont);
+/*
     node = get_node(ack_sent, &cont);
     if(NULL != node)
     {
@@ -38,7 +39,7 @@ void handle_hsyn(struct sk_buff *skb, struct content_hsyn *hsyn)
         send_ack_again((struct send_ack_info*)node);
         return;
     }
-
+*/
     //step 2:   check forward flag in chunk table
 
     if(forward_flag(&cont))
@@ -57,6 +58,7 @@ void handle_hsyn(struct sk_buff *skb, struct content_hsyn *hsyn)
 #endif
     if(bitmap_f(&cont, &cnode))
     {
+        node = get_node(chunk_table, &cont);
         //get all the resp pack in the chunk
         //send to netlink
 #ifdef DEBUG
@@ -64,13 +66,16 @@ void handle_hsyn(struct sk_buff *skb, struct content_hsyn *hsyn)
 #endif
         send_chunk(cnode);
 
+        //delete chunk free timer
+        if(node)
+            del_timer(&((struct chunk_info*)node)->time_free);
         //send ack
         send_ack(&cont);
     }
     else
     {
         //lack some pack
-        uint16_t length = 0;
+        uint32_t length = 0;
         uint8_t *bitmap = get_bitmap(&cont, &length, NET);
 #ifdef DEBUG
         printk("hanle_hsyn:S3->bitmap not full\n");

@@ -23,6 +23,7 @@
 
 #include "ack_sent.h"
 #include "wait_ack.h"
+#include "chunk_table.h"
 
 #define LINK_LEN 16
 #define BITMAP_H 2
@@ -44,7 +45,7 @@ uint8_t send_ack(struct hash_content* cont);
 //@bitmap:  pointer to bitmap
 //@len:     length of bitmap
 //return >0 means failed, 0 means success
-uint8_t send_needmore(struct hash_content *cont, uint8_t *bitmap, uint16_t len);
+uint8_t send_needmore(struct hash_content *cont, uint8_t *bitmap, uint32_t len);
 
 //this function is used to send ack/needmore again.
 //@node:    pointer to node in ack sent hash table.
@@ -69,6 +70,12 @@ uint8_t send_req(uint8_t *label, struct in6_addr sip, struct in6_addr dip, uint8
 //return >0 means failed, 0 means success
 uint8_t send_resp(uint8_t *label, struct in6_addr sip, struct in6_addr dip,
         uint16_t seq, uint16_t frag, uint16_t payload_len, uint8_t *data);
+
+//this function is used to send hsyn pack.
+//@label:   pointer to label
+//@sip:     src ip address
+//@dip:     dst ip address
+uint8_t send_hsyn(uint8_t *label, struct in6_addr sip, struct in6_addr dip);
 
 //this function is used to forward a req.
 //if FP==1, put a node into wait_ack hash table.

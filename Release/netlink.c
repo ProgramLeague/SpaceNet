@@ -11,7 +11,7 @@
 #include "netlink.h"
 
 struct app_info cache;
-static struct sock* nlfd;
+static struct sock* nlfd = NULL;
 static DEFINE_MUTEX(nl_mutex);
 static struct delist_head* token;
 //one more than TOKEN_LENGTH
@@ -34,9 +34,24 @@ void init_netlink(void)
     //init netlink
     cache.pid = 0;
     rwlock_init(&cache.lock);
-
+#ifndef NEW
+    //this is for kernel version below 3.6
     nlfd = netlink_kernel_create(&init_net, NETLINK_CACHE, 0,
             netlink_callback, &nl_mutex, THIS_MODULE);
+#endif
+#ifdef NEW
+    //this is for kernel version above 3.6
+    {
+        static struct netlink_kernel_cfg cfg = {
+            .groups = 0,
+            .flags = NL_CFG_F_NONROOT_SEND || NL_CFG_F_NONROOT_RECV,
+            .input = netlink_callback,
+            .cb_mutex = &nl_mutex,
+        }
+
+        nlfd = netlink_kernel_create(&init_net, NETLINK_CACHE, &cfg);
+    }
+#endif
     if(NULL == nlfd)
     {
         printk("can not creat a netlink socket\n");
@@ -114,9 +129,13 @@ uint32_t send_to_app(uint32_t token_num, uint8_t *label, uint8_t type,
     printk("token:%d\tlabel:%x\n", msg->id, msg->label[0]);
     printk("Send to client!\n");
 #endif
-    read_lock_bh(&cache.lock);
-    result = netlink_unicast(nlfd,skb,cache.pid,MSG_DONTWAIT);
-    read_unlock_bh(&cache.lock);
+    printk("id:%d\tlabel:%x\tseq:%d\tfrag:%d\tlength:%d\n", msg->id, msg->label[0],msg->seq,msg->frag,msg->length);
+    if(nlfd)
+    {
+        read_lock_bh(&cache.lock);
+        result = netlink_unicast(nlfd,skb,cache.pid,MSG_DONTWAIT);
+        read_unlock_bh(&cache.lock);
+    }
 
     if(result < 0)
     {
@@ -243,7 +262,6 @@ uint8_t send_label(uint8_t *label, struct in6_addr *sip, struct in6_addr *dip, u
 //@skb:     pointer to recv skb from cache app
 void netlink_callback(struct sk_buff *skb)
 {
-    //TODO 
     struct nlmsghdr *nlh = NULL;
     mutex_lock(&nl_mutex);
 #ifdef DEBUG
@@ -305,9 +323,13 @@ void netlink_callback(struct sk_buff *skb)
                                   chunk->seq, chunk->frag, chunk->length,
                                   chunk->data);
 
+printk("seq:%d,frag:%d,id:%d,length:%d\n",chunk->seq,chunk->frag,chunk->id,chunk->length);
                         //recv last pack
                         if(chunk->seq+1==chunk->frag)
                         {
+                            //send hsyn 
+                            send_hsyn(temp->label, temp->sip, temp->dip);
+
                             kfree(temp);
                             deal_array[token_num] = NULL;
                             try_put(token, token_num);

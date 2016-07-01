@@ -31,6 +31,7 @@ struct wait_ack_info
 //return CONTENT_TYPE
 enum CONTENT_TYPE recv_ack(struct hash_content *cont);
 
+enum CONTENT_TYPE recv_needmore(struct hash_content *cont);
 //this function is used to add a new node into wait ack hash table
 //@cont:    identification
 //@skb:     pointer to sk_buff

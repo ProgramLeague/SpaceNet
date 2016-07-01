@@ -1,0 +1,27 @@
+#########################################################################
+# File Name: refresh.sh
+# Author: He Jieting
+# mail: rambo@mail.ustc.edu.cn
+# Created Time: Wed May 11 23:25:02 2016
+#########################################################################
+#!/bin/bash
+
+if [ "`lsmod | grep forward_module`" = "forward_module" ] ; then
+    rmmod forward_module
+fi
+
+if [ -f /data/workspace/spacenet/Makefile ] ; then
+    cd /data/workspace/spacenet
+    make clean
+    make
+    insmod forward_module.ko
+    echo "done!"
+elif [ -f /data/workspace/spacenet/RouterNode/Makefile ] ; then
+    cd /data/workspace/spacenet/RouterNode
+    make clean
+    make
+    insmod forward_module.ko
+    echo "done!"
+else
+    echo "can not fine Makefile"
+fi

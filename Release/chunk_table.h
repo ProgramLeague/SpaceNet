@@ -30,7 +30,7 @@ struct chunk_info
     struct hash_node list;
     uint8_t flag;
     struct timer_list time_free;
-    uint16_t bitmap_len;
+    uint32_t bitmap_len;
     struct sk_buff* bitmap[];
 };
 
@@ -67,7 +67,7 @@ uint8_t bitmap_f(struct hash_content *cont, struct chunk_info** node);
 //| uint8_t| uint8_t|
 //|--------|--000000|
 //|<-length->|
-uint8_t* get_bitmap(struct hash_content *cont, uint16_t *length, enum USE type);
+uint8_t* get_bitmap(struct hash_content *cont, uint32_t *length, enum USE type);
 
 //use kfree to delete a node in chunk table.
 //@cont:    identification
